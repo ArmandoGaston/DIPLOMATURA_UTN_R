@@ -1,0 +1,148 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Series temporales
+
+Usamos el conjunto de datos "Gripes.csv" para transcribir el código de la clase
+
+```{r}
+setwd("C://Users//20421752657//Documents//1- Otros//Diplomatura en Data Science//3- Circular R//Series temporales")
+
+df1 <- read.csv("Gripes.csv", sep= ";", fileEncoding = "latin1") # Usamos el "latin1" para que lo pueda leer bien
+View(df1) # Esto es para ver bien el dataframe
+```
+
+
+Ahora lo que hacemos es instalar e importar los paquetes que vamos a utilizar
+
+```{r}
+#install.packages("forecast")
+#install.packages("TSA")
+#install.packages("tseries")
+
+library(forecast)
+library(TSA)
+library(stats)
+library(tseries)
+```
+
+Unificamos las columnas de 'Anio', Mes y Día para que podamos tener una columna de fechas
+
+```{r}
+df1$fecha <- as.Date(with(df1, paste(Anio, Mes, Día, sep = "-")))
+```
+
+Ahora graficamos la serie. Hacemos un análisis descriptivo. 
+
+```{r}
+library(ggplot2)
+options(repr.plot.width = 16, repr.plot.height = 6) # Tamaño de figura
+
+plot(df1$fecha, df1$Cantidad, type = "l",
+  xlab= "Fecha",
+  ylab= "Cantidad de casos",
+  main = "Casos de gripe entre 1999 y 2007",
+  xaxt = "n")
+
+axis.Date(1, at = seq(min(df1$fecha),
+                      max(df1$fecha),
+                      by = "year"),
+          format = "%Y") 
+```
+
+Es interesante notar que, dado que toma desde la fecha mínima (28 de mayo de 1999) y se ordena ir tomando por año hasta el final, el año 2007 no aparece porque no se llega en los datos hasta el 28 de mayo de 2007.
+
+Vemos una estacionalidad anual. Veamos dentro de un año si detectamos otra estacionalidad
+
+```{r}
+datos_2005 <- subset(df1, fecha >= as.Date("2005-01-01") & fecha <= as.Date("2005-12-31"))
+
+plot(datos_2005$fecha, datos_2005$Cantidad,
+     type = "l",
+     xlab= '',
+     ylab= '',
+     main = "Casos de gripe en 2005",
+     xaxt = "n")   # quita eje X automático
+
+axis.Date(1,
+          at = seq(min(datos_2005$fecha),
+                   max(datos_2005$fecha),
+                   by = "month"),
+          las = 2) # Gira las etiquetas 90 grados
+
+```
+Parece haber una tendencia semanal
+
+
+# Entrenamiento
+```{r}
+adf.test(df1$Cantidad) # Prueba de Dickey-Fuller para ver estacionalidad
+
+```
+La serie es claramente estacional. 
+
+Procedemos a particionar los datos para el entrenamiento
+
+```{r}
+train <- df1[1:(floor(2803*0.7)), ] # Separamos el 70% de los casos para entrenamiento
+
+test <- df1[(ceiling(2803*0.7)): 2803, ] # Separamos el 30% para contraste. Notar 'ceiling' para evitar una superposición de casos
+
+train$fecha <- as.Date(train$fecha) # Por las dudas, nos aseguramos que la columna Fecha de 'train' tenga dicho formato
+```
+
+Ahora creamos el objeto de tipo *ts*, que no es otra cosa que un array pero con características especiales que nos permiten hacer las operaciones para el modelo
+
+```{r}
+serie_temporal <- ts(data = train$Cantidad, frequency = 365)
+```
+
+Hacemos el entrenamiento propiamente dicho
+
+Lo hacemos con TBATS ¿POR QUÉ? ¿CUÁL ES LA DIFERENCIA CON ARIMA? Los períodos de estacionalidad se miden en días y ponemos dos: semanal (7) y anual (365.25) de acuerdo a lo que descubrimos antes en el análisis descriptivo
+
+```{r}
+modelo_tbats_train <- tbats(serie_temporal, seasonal.periods = c(7, 365.25))
+```
+
+Ahora hacemos el pronóstico
+
+```{r}
+horizonte_pronostico <- 365 # Queremos predecir un año
+forecast(modelo_tbats_train, h = horizonte_pronostico)
+```
+
+Como se aprecia, para cada valor devuelve un intervalo de confianza. A nosotros nos interesa el valor esperado (media) 
+
+```{r}
+pronostico_tbats <- forecast(modelo_tbats_train, h = horizonte_pronostico)$mean
+```
+
+Graficamos el pronóstico
+
+```{r}
+autoplot(pronostico_tbats, series = "Pronostico TBATS") + 
+  autolayer(serie_temporal,series = "Serie temporal")+
+  ylab("Cantidad") + 
+  xlab("Fecha") + 
+  ggtitle("Serie temporal de ventas y pronóstico tbats")
+```
+
+
+Comparamos la predicción con los datos de test. Usamos los datos inmediatamente posteriores a la partición hasta el día 365, momento en que se terminan las predicciones.
+
+Luego unimos los df por fecha para ver las diferencias y sacar las métricas de predicción
+
+
+```{r}
+df_pronostico <- data.frame( 
+              Fecha = seq(from = as.Date(min(test$fecha)), 
+                      by = "day", length.out =   horizonte_pronostico),
+              Pronostico = pronostico_tbats
+              )
+
+comparacion <- merge(test, df_pronostico, by.x = "fecha", by.y= "Fecha")
+```
+
