@@ -8,8 +8,6 @@ output: html_notebook
 Usamos el conjunto de datos "Gripes.csv" para transcribir el código de la clase
 
 ```{r}
-setwd("C://Users//20421752657//Documents//1- Otros//Diplomatura en Data Science//3- Circular R//Series temporales")
-
 df1 <- read.csv("Gripes.csv", sep= ";", fileEncoding = "latin1") # Usamos el "latin1" para que lo pueda leer bien
 View(df1) # Esto es para ver bien el dataframe
 ```
