@@ -1,9 +1,9 @@
 ---
-title: "R Notebook"
+title: "Series temporales"
 output: html_notebook
 ---
 
-# Series temporales
+# Datos
 
 Usamos el conjunto de datos "Gripes.csv" para transcribir el código de la clase
 
